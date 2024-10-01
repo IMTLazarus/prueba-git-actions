@@ -1,0 +1,51 @@
+name: Minify and Deploy prueba-git-actions
+
+on:
+    push:
+        branches:
+            - main
+
+jobs:
+    minify_and_deploy:
+        runs-on: ubuntu-latest
+
+        if: ${{ contains(github.event.head_commit.message, 'deploy') }}
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v2
+
+            - name: Debug directory contents before minification
+              run: ls -R
+
+            - name: Install dependencies
+              run: npm install -g uglify-js
+
+            - name: Minify Code
+              run: |
+                  mkdir -p minified-repo
+
+                  find . -type f -name '*.js' -not -path './node_modules/*' | while read file; do
+                    output_dir="minified-repo/$(dirname "$(echo "$file" | sed 's/^\.\///')")"
+                    mkdir -p "$output_dir"
+                    uglifyjs "$file" -o "$output_dir/$(basename "$file" .js).js"
+                  done
+
+                  find . -type f \( ! -name '*.js' -a ! -path './node_modules/*' \) -exec cp --parents {} minified-repo \;
+
+            - name: delete minified-repo/minified-repo
+              run: rm -rf minified-repo/minified-repo
+
+            - name: Display contents of minified-repo
+              run: ls -R minified-repo
+
+            - name: Deploy to another repository
+              run: |
+                  git config --global user.email "actions@github.com"
+                  git config --global user.name "GitHub Actions"
+                  git clone https://${{secrets.TOKEN}}@github.com/IMTLazarus/prueba-git-actions_minified.git temp-repo-destino
+                  cd temp-repo-destino
+                  cp -r ../minified-repo/* .
+                  git add .
+                  git commit -m "Minified code from prueba-git-actions repository"
+                  git push origin main
